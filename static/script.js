@@ -67,7 +67,7 @@
     html.dataset.theme = theme;
 
     // 2. Persist the user's choice across sessions
-    try { localStorage.setItem("devpath-theme", theme); } catch (e) { /* private browsing may block */ }
+    try { localStorage.setItem("theme", theme); } catch (e) { /* private browsing may block */ }
 
     // 3. Update every toggle button's accessible state
     document.querySelectorAll(".theme-toggle").forEach(function (btn) {
@@ -782,6 +782,18 @@ if (isIndexPage) {
   // Render result cards
   // ----------------------------------------------------------
 
+ main
+  function truncate(text, maxLength) {
+    if (!text) return "";
+    return text.length > maxLength ? text.slice(0, maxLength) + "..." : text;
+  }
+
+  function createTag(text, type) {
+    var span = document.createElement("span");
+    span.className = "project-tag project-tag--" + type;
+    span.textContent = text;
+    return span;
+
   //takes the array of projects from the api and draws them on the page as cards
   //if array is empty it shows the "no results" message instead
   function renderResults(projects, message) {
@@ -816,95 +828,94 @@ if (isIndexPage) {
     });
 
     resultsSection.scrollIntoView({ behavior: "smooth" });
+ main
   }
 
-  // builds one project card as a DOM element and returns it
-  // the card has title, short description, tags and link
   function buildProjectCard(project) {
     var card = document.createElement("div");
     card.className = "project-card";
 
-    // Title
     var title = document.createElement("h3");
     title.className = "project-card-title";
     title.textContent = project.title;
 
-    // Description wrapper — keeps text and button as separate child elements
-    // so we never use textContent (which would wipe out child nodes like the button)
     var desc = document.createElement("p");
     desc.className = "project-card-desc";
-
-    // Separate span for the description text so we can update it
-    // without touching the toggle button
     var descText = document.createElement("span");
     descText.className = "project-card-desc-text";
-
     var shortText = truncate(project.description, 120);
-    var fullText  = project.description;
+    var fullText = project.description;
     var isExpanded = false;
-
     descText.textContent = shortText;
     desc.appendChild(descText);
 
-    // Only add Read More button if description is actually truncated
-    if (fullText.length > 120) {
+    if (fullText && fullText.length > 120) {
       var readMoreBtn = document.createElement("button");
       readMoreBtn.className = "read-more-btn";
       readMoreBtn.textContent = "Read more";
-      // aria-expanded tells screen readers whether the content is expanded or not
       readMoreBtn.setAttribute("aria-expanded", "false");
-
       readMoreBtn.addEventListener("click", function () {
         isExpanded = !isExpanded;
-        // Update only the text span — button stays in the DOM untouched
         descText.textContent = isExpanded ? fullText : shortText;
         readMoreBtn.textContent = isExpanded ? "Read less" : "Read more";
         readMoreBtn.setAttribute("aria-expanded", isExpanded ? "true" : "false");
       });
-
       desc.appendChild(readMoreBtn);
     }
 
-    // Tags row
     var tagsRow = document.createElement("div");
     tagsRow.className = "project-card-tags";
-
     (project.skills || []).forEach(function (skill) {
       tagsRow.appendChild(createTag(skill, "skill"));
     });
-
-    var levelClass = "level " + (project.level || "").toLowerCase();
-    tagsRow.appendChild(createTag(project.level, levelClass));
+    tagsRow.appendChild(createTag(project.level, (project.level || "").toLowerCase()));
     tagsRow.appendChild(createTag("Time: " + project.time, "time"));
 
-      // Assemble the card in order
-      card.appendChild(title);
-      card.appendChild(desc);
-      card.appendChild(tagsRow);
-      card.appendChild(footer);
-
+    var footer = document.createElement("div");
+    footer.className = "project-card-footer";
     var link = document.createElement("a");
     link.className = "btn-details";
     link.textContent = "View Full Project";
     link.href = "/project/" + project.id;
+    footer.appendChild(link);
 
-    // helper to create a coloured tag element (used for skills, level, time tags on the cards)
-    function createTag(text, type) {
-      var span = document.createElement("span");
-      // The type becomes a BEM modifier so CSS can style each tag differently
-      span.className = "project-tag project-tag--" + type;
-      span.textContent = text;
-      return span;
+    card.appendChild(title);
+    card.appendChild(desc);
+    card.appendChild(tagsRow);
+    card.appendChild(footer);
+    return card;
+  }
+
+  //takes the array of projects from the api and draws them on the page as cards
+  function renderResults(projects, message) {
+    resultsSection.style.display = "block";
+    resultsLoadingEl.style.display = "none";
+    resultsGrid.innerHTML = "";
+
+    if (!projects || projects.length === 0) {
+      resultsGrid.style.display = "none";
+      resultsEmptyEl.style.display = "block";
+      var selectedInterest = document.getElementById("interest") && document.getElementById("interest").value;
+      if (selectedInterest) {
+        emptyMessageEl.textContent = "No projects are currently available for this interest. Please check back later or try a different area.";
+      } else if (message) {
+        emptyMessageEl.textContent = message;
+      } else {
+        emptyMessageEl.textContent = "Try adjusting your skills or choosing a different interest area.";
+      }
+      resultsSection.scrollIntoView({ behavior: "smooth" });
+      return;
     }
 
-    function truncate(text, maxLength) {
-      // Safety check — just return empty string if text is missing
-      if (!text) return "";
-      // Only add "..." if the text is actually longer than the limit
-      return text.length > maxLength ? text.slice(0, maxLength) + "..." : text;
-    }
+    resultsEmptyEl.style.display = "none";
+    resultsGrid.style.display = "grid";
+    projects.forEach(function (project) {
+      resultsGrid.appendChild(buildProjectCard(project));
+    });
+    resultsSection.scrollIntoView({ behavior: "smooth" });
+  }
 
-  } // end isIndexPage
+} // end isIndexPage
 
 
   // ============================================================
@@ -1385,46 +1396,60 @@ updateRoadmapProgress();
     });
   } // end github modal handlers
 
-    /* ---- Scroll-to-top button ---- */
 
-    /* Show the button only when the user has scrolled more than 300px */
-    var SCROLL_THRESHOLD = 300;
+// ============================================================
+// SCROLL NAVIGATION BUTTON (runs on all pages)
+// ============================================================
+(function () {
+  var SCROLL_THRESHOLD = 200;
+  var scrollTopBtn = document.getElementById('scroll-top-btn');
+  var scrollBtnIcon = document.getElementById('scroll-btn-icon');
+  var atBottom = false;
 
-    /* Get the button element; guard against pages that do not have it */
-    var scrollTopBtn = document.getElementById('scroll-top-btn');
+  var ARROW_UP   = '<polyline points="18 15 12 9 6 15"/>';
+  var ARROW_DOWN = '<polyline points="6 9 12 15 18 9"/>';
 
-    /* Add or remove the .visible class based on scroll position */
-    function handleScroll() {
-      if (!scrollTopBtn) return;
-      if (window.pageYOffset > SCROLL_THRESHOLD) {
-        scrollTopBtn.classList.add('visible');
-      } else {
-        scrollTopBtn.classList.remove('visible');
-      }
-    }
-
-    /* Smooth-scroll to the very top of the page */
-    function scrollToTop() {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-/* Add or remove the .visible class based on scroll position */
-function handleScroll() {
-  if (!scrollTopBtn) return;
-  if (window.pageYOffset > SCROLL_THRESHOLD) {
-    scrollTopBtn.classList.add('visible');
-  } else {
-    scrollTopBtn.classList.remove('visible');
+  function isNearBottom() {
+    return (window.innerHeight + window.pageYOffset) >= document.body.scrollHeight - 40;
   }
-}
 
-/* Smooth-scroll to the very top of the page */
-function scrollToTop() {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
+  function handleScroll() {
+    if (!scrollTopBtn) return;
+    if (window.pageYOffset > SCROLL_THRESHOLD) {
+      scrollTopBtn.classList.add('visible');
+    } else {
+      scrollTopBtn.classList.remove('visible');
+    }
+    if (isNearBottom()) {
+      atBottom = true;
+      scrollTopBtn.setAttribute('aria-label', 'Scroll to top');
+      scrollTopBtn.title = 'Scroll to top';
+      if (scrollBtnIcon) scrollBtnIcon.innerHTML = ARROW_UP;
+    } else {
+      atBottom = false;
+      scrollTopBtn.setAttribute('aria-label', 'Scroll to bottom');
+      scrollTopBtn.title = 'Scroll to bottom';
+      if (scrollBtnIcon) scrollBtnIcon.innerHTML = ARROW_DOWN;
+    }
+  }
+
+ main
+  if (scrollTopBtn) {
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    scrollTopBtn.addEventListener('click', function () {
+      if (atBottom) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }
+    });
+    handleScroll();
+  }
+}());
 
 /* Only wire up listeners if the button exists on this page */
 if (scrollTopBtn) {
     window.addEventListener('scroll', handleScroll);
     scrollTopBtn.addEventListener('click', scrollToTop);
 }
+ main
