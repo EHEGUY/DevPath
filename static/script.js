@@ -550,6 +550,51 @@ updateProfileWidgets();
     resultsSection.scrollIntoView({ behavior: "smooth" });
   }
 
+  function runProjectSearch(query) {
+    if (!query) return;
+    setLoadingState(true);
+    fetch("/api/search?q=" + encodeURIComponent(query))
+      .then(function (response) {
+        return response.json().then(function (data) {
+          if (!response.ok) throw new Error("Search failed. Please try again.");
+          return data;
+        });
+      })
+      .then(function (projects) {
+        setLoadingState(false);
+        recordSearch();
+        var message = projects.length
+          ? null
+          : "No projects matched \"" + query + "\". Try a different keyword.";
+        renderResults(projects, message);
+        var mobileMenu = document.getElementById("nav-mobile-menu");
+        var mobileToggle = document.getElementById("nav-mobile-toggle");
+        if (mobileMenu && mobileMenu.classList.contains("open")) {
+          mobileMenu.classList.remove("open");
+          if (mobileToggle) {
+            mobileToggle.classList.remove("open");
+            mobileToggle.setAttribute("aria-expanded", "false");
+          }
+        }
+      })
+      .catch(function (err) {
+        setLoadingState(false);
+        var general = document.getElementById("form-error-general");
+        if (general) general.textContent = err.message || "Search failed. Please try again.";
+      });
+  }
+
+  function bindSearchForm(form, input) {
+    if (!form || !input) return;
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      runProjectSearch(input.value.trim());
+    });
+  }
+
+  bindSearchForm(document.getElementById("topic-search-form"), document.getElementById("topic-search"));
+  bindSearchForm(document.getElementById("topic-search-form-mobile"), document.getElementById("topic-search-mobile"));
+
   skillsInput.setAttribute("role", "combobox");
   skillsInput.setAttribute("aria-expanded", "false");
   suggestions.setAttribute("role", "listbox");
